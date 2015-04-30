@@ -2,6 +2,10 @@
 
 This station is designed to be placed into Asteroid (or, even easier - to place asteroid around the base)
 
+![Hangar Bay](./screenshots/hangar_bay.gif)
+![Cargo Bay](./screenshots/cargo_bay.gif)
+![CrossRoad](./screenshots/crossroad.gif)
+
 * TODO - share blueprint on steamworks
 
 ### Main features
