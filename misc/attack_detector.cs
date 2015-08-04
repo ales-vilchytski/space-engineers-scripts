@@ -1,40 +1,44 @@
 /// Attack detecting script.
 /// Checks quantity of ammo in turrets and alerts if it reduces
+/// Uses slightly modified version of EasyAPI https://github.com/rockyjvec/EasyAPI/blob/9ce7e19ecb14b55f8074d1f53ba46b0cc76b675b/EasyAPI.cs
 
 public class AttackDetector : EasyAPI
 {
-    VRage.MyFixedPoint ammo;
-
-    public Example(IMyGridTerminalSystem grid, IMyProgrammableBlock me, Action<string> echo, TimeSpan elapsedTime) : base(grid, me, echo, elapsedTime)
+    public VRage.MyFixedPoint ammo;
+    EasyBlocks turrets;
+    EasyLCD log;
+    EasyBlock beacon;
+    StorageSetter storage;
+    
+    public AttackDetector(StorageSetter storage, IMyGridTerminalSystem grid, IMyProgrammableBlock me, Action<string> echo, TimeSpan elapsedTime) : base(grid, me, echo, elapsedTime)
     {
-        ammo = new VRageMyFixedPoint(Convert.Int32(Storage));
-        EasyBlocks turrets = Blocks.InGroupsNamed("Turrets");
-        EasyLCD log = new EasyLCD(Blocks.Named("LCD Panel Attacks Log"));
-        EasyBlocks beacon = Blocks.Named("Beacon Attack Detector").First();
+        ammo = VRage.MyFixedPoint.DeserializeStringSafe(storage.getStorage());
+        turrets = Blocks.InGroupsNamed("Turrets");
+        log = new EasyLCD(Blocks.Named("LCD Panel Attacks Log"));
+        beacon = Blocks.InGroupsNamed("Beacon Attack Detector").GetBlock(0);
+        this.storage = storage;
         
-        Every(5 * EasyAPI.Seconds, delegate() {
-            VRage.MyFixedPoint newAmmo = turrets.Items().OfType("Ammo").Count(); // check it!
-            
-            if (newAmmo < ammo) {
-                string timestamp = DateTime.UtcNow.ToString("dd.mm.yyyy HH:MM:SS");
-                log.SetText("[" + timestamp + "] Attack detected, fired " + (ammo - newAmmo) + " ammo; Remaining: " + newAmmo, true);
-                beacon.SetName("!!! Attack detected at " + timestamp + " !!!");
-            }
-            
-            ammo = newAmmo;
-            Storage = ammo.ToString();
-            
-            //* check types of blocks
-            EasyLCD debug = new EasyLCD(Blocks.Named("debug"));
-            debug.SetText("");
-            List<EasyItem> allItems = turrets.Items();
-            for (int i = 0; i < allItems.Length; ++i) {
-                debug.SetText(allItems[i].Type() + ": " + allItems[i].Amount() + " \n", true);
-            }
-            //*
+        Every(5 * EasyAPI.Seconds, doWork);
+        On("clear", delegate() {
+            log.SetText("");
+            beacon.SetName("Beacon Attack Detector");
         });
-        
     }
+    
+    public void doWork() {
+        VRage.MyFixedPoint newAmmo = turrets.Items().OfType("NATO_25x184mm").Count();
+        newAmmo = newAmmo + turrets.Items().OfType("Missile200mm").Count();
+        
+        if (newAmmo < ammo) {
+            string timestamp = DateTime.UtcNow.AddHours(3).ToString("dd.MM.yyyy HH:mm:ss");
+            log.SetText("[" + timestamp + "] Attack detected, fired " + (ammo - newAmmo) + " ammo; Remaining: " + newAmmo + "\n" + log.screen.GetPublicText());
+            beacon.SetName("!!! Attack detected at " + timestamp + " !!!");
+        }
+        
+        ammo = newAmmo;
+        storage.setStorage(ammo.ToString());
+    }
+    
 }
 
 
@@ -44,17 +48,29 @@ public class AttackDetector : EasyAPI
 
 AttackDetector state;
 
+public class StorageSetter {
+    public Action<String> setStorage;
+    public Func<String> getStorage;
+    public StorageSetter(Action<String> setStorage, Func<String> getStorage) {
+        this.setStorage = setStorage;
+        this.getStorage = getStorage;
+    }
+}
+
 void Main(string argument)
 {
     if(state == null)
     {
-        state = new AttackDetector(GridTerminalSystem, Me, Echo, ElapsedTime);
+        state = new AttackDetector(new StorageSetter(
+            delegate(String storage) { this.Storage = storage; }, 
+            delegate() { return this.Storage; }), 
+            GridTerminalSystem, Me, Echo, ElapsedTime);
     }
 
     // Set the minimum time between ticks here to prevent lag.
     // To utilise onSingleTap and onDoubleTap, set the minimum time to the same
     // time period of the timer running this script (e.g. 1 * EasyAPI.Seconds).
-    state.Tick(100 * EasyAPI.Milliseconds, argument);
+    state.Tick(1 * EasyAPI.Seconds, argument);
 } 
  
  
@@ -1366,7 +1382,7 @@ public class EasyUtils {
 public class EasyLCD
 {
     public char[] buffer;
-    IMyTextPanel screen;
+    public IMyTextPanel screen;
     EasyBlock block;
 
     public int width;
